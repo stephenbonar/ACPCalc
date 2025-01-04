@@ -33,14 +33,8 @@
     .section .rodata
 
 /* We create labeled zero-terminated string constants with .asciz directive */
-programName: .asciz "ACPCalc"
-programVersion: .asciz "v0.01"
-programCopyright: .asciz "Copyright (C) 2024 Stephen Bonar"
-programInfo: .asciz "%s %s\n%s\n\n"
-menuInfo: .asciz "\n\nMenu:\n\n%s\n%s\n\n< "
-enterNumberChoice: .asciz "1) Enter number"
-exitChoice: .asciz "0) Exit"
 invalidChoiceError: .asciz "Invalid Choice!"
+entryString: .asciz "%d"
 
     /* 
      * Since we specified the .rodata section first, we need to indicate we're
@@ -98,36 +92,18 @@ main:
     str r0, [fp, #result_offset]
 
     /*
-     * We will call the printf function in libc to print the program info.
+     * Print information about the program (version, copyright, etc.)
      *
-     * int printf(const char* format, ...);
-     * 
-     * The first argument in libc is the format string, which is programInfo in
-     * our case, followed by any arguments we want to substitute into the
-     * format string. By calling convention, register r0 is the first function
-     * argument, followed by r1, r2, and r3. Any additional args must be on the
-     * stack.
+     * We print the program information to the screen by calling the function
+     * print_program_info(). The print_program_info function is defined in the
+     * output.s source file.
      *
-     * LDR <dest>, <address> loads the contents of memory at address into the
-     * destination register. In this case, =<label> tells the assembler to 
-     * add a pointer to the label in the literal pool, which is at the bottom
-     * of the .text section. This puts a .word containing the address of the
-     * string in the .text section, which is essentially a pointer to the 
-     * string characters. This allows the load instruction to use an address 
-     * relative to the program counter. This is necessary because a "far" 
-     * addresses like the strings stored in the .rodata section can't fit as
-     * an immediate value in ldr, but an offset relative to the program counter
-     * can. 
      *
      * BL <address> tells the CPU to jump to the instructions at the specified
      * address and store the current program counter address in the link 
      * register (LR) as a return address. This calls the function.
      */
-    ldr r0, =programInfo
-    ldr r1, =programName
-    ldr r2, =programVersion
-    ldr r3, =programCopyright
-    bl printf
+    bl print_program_info
 
     /* 
     * Main menu loop.
@@ -140,16 +116,15 @@ main:
     * Local labels must always start with a number but can be optionally followed
     * by a name.
     */
-0:
+10:
     /* Load the result from the local variable on the stack so we can print. */
     ldr r0, [fp, #result_offset]
+
+    /* Print the current result in binary, hexadecimal, and decimal formats. */
     bl print_result
 
     /* Display the menu choices and the choice prompt. */
-    ldr r0, =menuInfo
-    ldr r1, =enterNumberChoice
-    ldr r2, =exitChoice
-    bl printf
+    bl print_menu
 
     /* 
      * We will call the getchar function in libc to read in a single character
@@ -180,8 +155,16 @@ main:
      * multiple local labels in the program named 2. 
      */
     cmp r0, #'0'
-    beq 1f
+    beq 0f
 
+1:
+    cmp r0, #'1'
+    blne 2f
+    bl enter_number
+    str r0, [fp, #result_offset]
+    bal 10b
+
+2:
     /* 
      * If we reach this point, the user entered an invalid choice. We need to
      * print an error message and loop back to _main_menu.
@@ -196,11 +179,35 @@ main:
      */
     ldr r0, =invalidChoiceError
     bl print_error
-    bal 0b
+    bal 10b
 
     /* Local label for exiting / returning from the function. */
-1:
+0:
     pop {r4}    @ Restore r4 to what it was before main was called.
     mov r0, #0  @ Register r0 contains the return value by convention.
     return      @ Use the return macro. See macros.s for more details.
+    .endfunc
+
+    .func enter_number
+enter_number:
+    init_stack_frame
+
+    /* Allocate a local variable on the stack for the entered number. */
+    sub sp, sp, #word_size_bytes
+    .equ entry_offset, -8
+
+    /* Print the prompt. */
+    bl print_number_prompt
+
+    /* Get the number from the keyboard. */
+    ldr r0, =entryString
+    add r1, fp, #entry_offset
+    bl scanf
+    bl getchar                   @ We need to capture the newline character.
+    ldr r0, [fp, #entry_offset]  @ Load entry into r0 as the return value.
+
+    /* Deallocate entry on the stack. */
+    add sp, #word_size_bytes
+
+    return
     .endfunc

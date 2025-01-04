@@ -22,6 +22,9 @@
      * We need to mark these functions as global so they are available to
      * other parts of the program.
      */
+    .global print_program_info
+    .global print_number_prompt
+    .global print_menu
     .global print_result
     .global print_binary
     .global print_error
@@ -29,9 +32,18 @@
     /* We store our string constants in the read-only data section. */
     .section .rodata
 
+    programName: .asciz "ACPCalc"
+    programVersion: .asciz "v0.01"
+    programCopyright: .asciz "Copyright (C) 2024 Stephen Bonar"
+    programFormat: .asciz "%s %s\n%s\n\n"
+    menuFormat: .asciz "\n\nMenu:\n\n%s\n%s\n\n%s"
+    prompt: .asciz "< "
+    enterNumberChoice: .asciz "1) Enter number"
+    exitChoice: .asciz "0) Exit"
+    enterNumberFormat: .asciz "\n\nEnter a number\n\n%s"
     resultHeader: .asciz "Result:\n"
     resultBinFormat: .asciz "\nBIN: "
-    resultHexFormat: .asciz "\nHEX: 0x%#08X"
+    resultHexFormat: .asciz "\nHEX: 0x%08X"
     resultDecFormat: .asciz "\nDEC: %i"
     zero: .asciz "0"
     one: .asciz "1"
@@ -40,6 +52,81 @@
 
     /* Switch to the text section for the code. */
     .text
+
+    /*
+     * Prints the program's information, including name, version, and 
+     * copyright.
+     *
+     * void print_program_info();
+     */
+    .func print_program_info
+print_program_info:
+    init_stack_frame
+
+    /*
+     * We will call the printf function in libc to print the program info.
+     *
+     * int printf(const char* format, ...);
+     * 
+     * The first argument in libc is the format string, which is programInfo in
+     * our case, followed by any arguments we want to substitute into the
+     * format string. By calling convention, register r0 is the first function
+     * argument, followed by r1, r2, and r3. Any additional args must be on the
+     * stack.
+     *
+     * LDR <dest>, <address> loads the contents of memory at address into the
+     * destination register. In this case, =<label> tells the assembler to 
+     * add a pointer to the label in the literal pool, which is at the bottom
+     * of the .text section. This puts a .word containing the address of the
+     * string in the .text section, which is essentially a pointer to the 
+     * string characters. This allows the load instruction to use an address 
+     * relative to the program counter. This is necessary because a "far" 
+     * addresses like the strings stored in the .rodata section can't fit as
+     * an immediate value in ldr, but an offset relative to the program counter
+     * can. 
+     *
+     * BL <address> tells the CPU to jump to the instructions at the specified
+     * address and store the current program counter address in the link 
+     * register (LR) as a return address. This calls the function.
+     */
+    ldr r0, =programFormat
+    ldr r1, =programName
+    ldr r2, =programVersion
+    ldr r3, =programCopyright
+    bl printf
+
+    return
+    .endfunc
+
+    /*
+     * Prints the program's main menu.
+     *
+     * void print_menu();
+     */
+    .func print_menu
+print_menu:
+    init_stack_frame
+    ldr r0, =menuFormat
+    ldr r1, =enterNumberChoice
+    ldr r2, =exitChoice
+    ldr r3, =prompt
+    bl printf
+    return
+    .endfunc
+
+    /*
+     * Prints a prompt for the user to enter a number:
+     *
+     * void print_number_prompt();
+     */
+    .func print_number_prompt
+print_number_prompt:
+    init_stack_frame
+    ldr r0, =enterNumberFormat
+    ldr r1, =prompt
+    bl printf
+    return
+    .endfunc
  
     /*
      * Prints the result of calculation in various formats.
@@ -48,6 +135,8 @@
      * formats.
      *
      * void print_result(int result);
+     *
+     * Parameters:
      *
      * r0 = result.
      */
@@ -101,6 +190,8 @@ print_result:
      *
      * void print_binary(int number);
      *
+     * Parameters:
+     *
      * r0 = int number.
      */
     .func print_binary
@@ -144,22 +235,49 @@ print_binary:
 
     /* Print a space as we've completed an entire octet. */
     mov r6, #bits_per_byte  @ Reset the octet counter.
-    ldr r0, =space          
+    ldr r0, =space
     bl printf
 
     /* Local label for printing an individual bit. */
 2:
     /* 
-     * We first shift the result right by the number left in the loop
-     * counter. This will put the next bit in register r7. We use the 'S'
-     * suffix on the MOV instruction to tell this operation to update the
-     * status register.
+     * First, we need to select the bit we want to examine by setting r7 to 1
+     * and then shifting that bit left to the desired bit.
+     *
+     * LSL <dest>, <source>, <amount> shifts the bits in source left by the 
+     * specified amount of bits and stores the result in dest.
      */
-    movs r7, r4, lsr r5
+    mov r7, #1
+    lsl r7, r7, r5
 
+    /*
+     * Then, we need to do do a bitwise AND against the number we're printing
+     * (r4) and the selected bit in r7 to clear all of the bits except the one
+     * we want to check. We then shift the result of AND in r7 back to the
+     * right the same amount to see if it is a 1 or a 0.
+     *
+     * AND <dest>, <operand1>, <operand2> performs a bitwise AND on operand1
+     * and operand2 and stores it in dest.
+     *
+     * LSR <dest>, <source>, <amount> shifts the bits in source right by the 
+     * specified amount of bits and stores the result in dest. Here we use the
+     * S suffix to update the status registers based on the result of the LSR
+     * instruction.
+     */
+    and r7, r4, r7    
+    lsrs r7, r7, r5
+
+    /*
+     * If shifting the bits right resulted in the zero flag being set, we know
+     * the bit was a zero so we load the zero string in r0 (the EQ suffix tells
+     * the first load instruction only to execute if the zero flag is set).
+     * Otherwise, if the zero flag is not set, we know the bit was a 1 so we
+     * load the one string into r0 (the NE suffix tells the second load 
+     * instruction to only load the one string if the zero flag was not set).
+     */
     ldreq r0, =zero     @ If the bit was a zero, load the '0' character.
     ldrne r0, =one      @ If the bit was a one, load the '1' character.
-    bleq printf         @ Print the individual bit.
+    bl printf           @ Print the individual bit.
 
     /*
      * Check if the loop counter has reached zero, otherwise start the loop
@@ -181,6 +299,8 @@ print_binary:
  * Prints the specified error message.
  *
  * void print_error(const char* message);
+ *
+ * Parameters:
  *
  * r0 = message
  */
