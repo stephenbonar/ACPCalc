@@ -1,6 +1,6 @@
 /* 
  * output.s - Contains functions for printing values in different formats.
- * Copyright (C) 2024 Stephen Bonar
+ * Copyright (C) 2025 Stephen Bonar
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -33,12 +33,13 @@
     .section .rodata
 
     programName: .asciz "ACPCalc"
-    programVersion: .asciz "v0.01"
-    programCopyright: .asciz "Copyright (C) 2024 Stephen Bonar"
+    programVersion: .asciz "v0.02"
+    programCopyright: .asciz "Copyright (C) 2025 Stephen Bonar"
     programFormat: .asciz "%s %s\n%s\n\n"
-    menuFormat: .asciz "\n\nMenu:\n\n%s\n%s\n\n%s"
+    menuFormat: .asciz "\n\nMenu:\n\n%s\n%s\n%s\n\n%s"
     prompt: .asciz "< "
     enterNumberChoice: .asciz "1) Enter number"
+    addNumberChoice: .asciz "2) Add number"
     exitChoice: .asciz "0) Exit"
     enterNumberFormat: .asciz "\n\nEnter a number\n\n%s"
     resultHeader: .asciz "Result:\n"
@@ -68,8 +69,8 @@ print_program_info:
      *
      * int printf(const char* format, ...);
      * 
-     * The first argument in libc is the format string, which is programInfo in
-     * our case, followed by any arguments we want to substitute into the
+     * The first argument in libc is the format string, which is programFormat
+     * in our case, followed by any arguments we want to substitute into the
      * format string. By calling convention, register r0 is the first function
      * argument, followed by r1, r2, and r3. Any additional args must be on the
      * stack.
@@ -106,11 +107,24 @@ print_program_info:
     .func print_menu
 print_menu:
     init_stack_frame
+
+    /* 
+     * There are more printf function arguments than we can place in registers,
+     * so the rest have to be pushed on the stack. 
+     */
+    ldr r0, =prompt
+    push {r0}
+
+    /* The first 4 printf arguments can be stored in r0 - r3 */
     ldr r0, =menuFormat
     ldr r1, =enterNumberChoice
-    ldr r2, =exitChoice
-    ldr r3, =prompt
+    ldr r2, =addNumberChoice
+    ldr r3, =exitChoice
     bl printf
+
+    /* Deallocate the additional arguments we had to push on the stack. */
+    add sp, #word_size_bytes
+
     return
     .endfunc
 

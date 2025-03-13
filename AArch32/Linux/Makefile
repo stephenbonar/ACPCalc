@@ -15,7 +15,7 @@
 
 all: acpcalc
 
-acpcalc: main.s output.s
+acpcalc: main.s output.s input.s
 	gcc -g -o $@ $^
 
 clean:

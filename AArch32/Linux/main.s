@@ -1,6 +1,6 @@
 /* 
  * main.s - Main program source file.
- * Copyright (C) 2024 Stephen Bonar
+ * Copyright (C) 2025 Stephen Bonar
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -34,7 +34,6 @@
 
 /* We create labeled zero-terminated string constants with .asciz directive */
 invalidChoiceError: .asciz "Invalid Choice!"
-entryString: .asciz "%d"
 
     /* 
      * Since we specified the .rodata section first, we need to indicate we're
@@ -70,12 +69,15 @@ main:
      * stack without push or pop by simply moving the stack pointer to the
      * next available position. We do this by subtracting the size of a word
      * (4 bytes) from the stack pointer (the system stack grows downward
-     * towards lower memory addresses.
+     * towards lower memory addresses. This is what happens in C when you
+     * create a local variable in a function.
      *
      * SUB <dest>, <operand1>, <operand2> subtracts operand2 from operand1
      * and stores the result in <dest>.
      *
-     * .equ assigns a name to an immediate value.
+     * .equ assigns a name to an immediate value. Here result_offset will
+     * keep track of the offset from the frame pointer of the result local
+     * variable we allocated.
      *
      * MOV <dest>, <source> copies the source value into the destination 
      * register.
@@ -98,7 +100,6 @@ main:
      * print_program_info(). The print_program_info function is defined in the
      * output.s source file.
      *
-     *
      * BL <address> tells the CPU to jump to the instructions at the specified
      * address and store the current program counter address in the link 
      * register (LR) as a return address. This calls the function.
@@ -106,16 +107,16 @@ main:
     bl print_program_info
 
     /* 
-    * Main menu loop.
-    *
-    * 0: is a local label. These numbered labels (0 - 99) are used for branching
-    * to different parts of a function or macro rather than an entirely new 
-    * subroutine. This is useful for loops and conditionals where you're still
-    * within a subroutine but need to jump to different parts of that routine.
-    * Unlike named labels, local labels do not get symbols in the executable. 
-    * Local labels must always start with a number but can be optionally followed
-    * by a name.
-    */
+     * Main menu loop.
+     *
+     * 10: is a local label. These numbered labels (0 - 99) are used for branching
+     * to different parts of a function or macro rather than an entirely new 
+     * subroutine. This is useful for loops and conditionals where you're still
+     * within a subroutine but need to jump to different parts of that routine.
+     * Unlike named labels, local labels do not get symbols in the executable. 
+     * Local labels must always start with a number but can be optionally followed
+     * by a name.
+     */
 10:
     /* Load the result from the local variable on the stack so we can print. */
     ldr r0, [fp, #result_offset]
@@ -138,7 +139,7 @@ main:
     bl getchar
 
     /*
-     * Use the compare instruction to check if the user typed 0. 
+     * Use the compare instruction to determine which menu entry to jump to. 
      *
      * CMP operand1, operand2 compares the two operands by subtracting operand2
      * from operand1, discarding the result. CMP updates the status register 
@@ -156,18 +157,22 @@ main:
      */
     cmp r0, #'0'
     beq 0f
-
-1:
     cmp r0, #'1'
-    blne 2f
-    bl enter_number
-    str r0, [fp, #result_offset]
-    bal 10b
+    beq 1f
+    cmp r0, #'2'
+    beq 2f
 
-2:
     /* 
-     * If we reach this point, the user entered an invalid choice. We need to
-     * print an error message and loop back to _main_menu.
+     * If we reach this point, we've entered an invalid menu choice. 11: prints
+     * an error for invalid choice and returns to the main menu.
+     */
+    bal 11f
+
+    /* 
+     * Menu Selection 1.
+     *
+     * Prompts the user to enter a number and store it in the result. Returns
+     * to the main menu by branching to 10b.
      *
      * BAL adds the conditional suffix AL (always) to the b (branch) 
      * instruciton. This is the default suffix so it isn't strictly necessary,
@@ -177,37 +182,49 @@ main:
      * label to indicate we want to jump to the local label 1 that comes 
      * immediately before this instruction. 
      */
+1:
+    bl enter_number
+    str r0, [fp, #result_offset]
+    bal 10b
+
+    /*
+     * Menu Selection 2.
+     *
+     * Promps the user to enter a number to add to the result. Returns to the
+     * main menu by branching to 10b.
+     */
+2:
+    bl enter_number
+    mov r1, r0
+    ldr r0, [fp, #result_offset]
+    add r0, r1
+    str r0, [fp, #result_offset]
+    bal 10b
+
+11:
+    /* 
+     * Prints the invalid choice error.
+     */
     ldr r0, =invalidChoiceError
     bl print_error
     bal 10b
 
-    /* Local label for exiting / returning from the function. */
+    /* 
+     * Local label for exiting / returning from the function.
+     *
+     * We want to return 0 for success. R0 contains the return value by
+     * convention, so we first store 0 in R0.
+     *
+     * We then add 4 to the stack pointer to deallocate the
+     * local result variable so the stack pointer is once again pointing
+     * to the link register preserved at the top of the stack frame.
+     *
+     * We then call the return macro defined in macros.s to pop the 
+     * frame pointer and link register off the stack, unwinding the stack
+     * frame. 
+     */
 0:
-    pop {r4}    @ Restore r4 to what it was before main was called.
-    mov r0, #0  @ Register r0 contains the return value by convention.
-    return      @ Use the return macro. See macros.s for more details.
-    .endfunc
-
-    .func enter_number
-enter_number:
-    init_stack_frame
-
-    /* Allocate a local variable on the stack for the entered number. */
-    sub sp, sp, #word_size_bytes
-    .equ entry_offset, -8
-
-    /* Print the prompt. */
-    bl print_number_prompt
-
-    /* Get the number from the keyboard. */
-    ldr r0, =entryString
-    add r1, fp, #entry_offset
-    bl scanf
-    bl getchar                   @ We need to capture the newline character.
-    ldr r0, [fp, #entry_offset]  @ Load entry into r0 as the return value.
-
-    /* Deallocate entry on the stack. */
-    add sp, #word_size_bytes
-
+    mov r0, #0
+    add sp, sp, #word_size_bytes
     return
     .endfunc

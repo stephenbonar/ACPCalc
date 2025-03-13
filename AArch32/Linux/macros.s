@@ -1,6 +1,6 @@
 /* 
  * macros.s - Provides shared macros for use within the program.
- * Copyright (C) 2024 Stephen Bonar
+ * Copyright (C) 2025 Stephen Bonar
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,11 +22,16 @@
 
     /* 
      * This macro is used to set up the stack frame at the beginning of a
-     * function. 
+     * function. A stack frame is the portion of the stack reserved for the
+     * current function's use. It is generally initialized at the top of the
+     * stack, or right after the calling function's stack frame. 
      *
-     * Due to calling conventions, we need to initialize the stack frame by 
-     * preserving the frame pointer and the link register by pushing them on 
-     * the stack.
+     * Calling conventions dictate we need to initialize the stack frame
+     * by preserving the frame pointer and the link register values of the
+     * callilng function by pushing them on the stack. This allow the current
+     * function to keep track of the return address so we can return to the
+     * calling function at the end, and restore the frame pointer to the 
+     * calling function's stack frame.
      *
      * PUSH accepts a list of registers and pushes them onto the stack,
      * decrementing the stack pointer register SP (R13) by 4 bytes for
@@ -34,10 +39,14 @@
      * towards lower memory addresses.
      *
      * We now have a stack frame of two 4-byte items (8-bytes total) created
-     * for the main function when we pushed fp and lr onto the stack. The
-     * frame pointer should point to the first item that was pushed onto the
-     * stack, but the stack pointer is on the second item. So, we simply add
-     * 4 to it to point to the first item.
+     * for the main function when we pushed fp and lr onto the stack. Because
+     * the frame pointer still points to the stack frame of the calling 
+     * function but now needs to point to the stack frame of the current 
+     * function, we need to adjust it to point to the first item that was 
+     * pushed onto the stack for the current function, but the stack pointer 
+     * is on the second item. So, we simply add 4 to the stack pointer and
+     * store the result in the frame pointer to have it point to the current
+     * stack frame.
      *
      * ADD <dest>, <operand1>, <operand2> or fp = sp + 4
      */
