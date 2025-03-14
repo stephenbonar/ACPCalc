@@ -161,6 +161,8 @@ main:
     beq 1f
     cmp r0, #'2'
     beq 2f
+    cmp r0, #'3'
+    beq 3f
 
     /* 
      * If we reach this point, we've entered an invalid menu choice. 11: prints
@@ -197,7 +199,21 @@ main:
     bl enter_number
     mov r1, r0
     ldr r0, [fp, #result_offset]
-    add r0, r1
+    add r0, r0, r1
+    str r0, [fp, #result_offset]
+    bal 10b
+
+    /*
+     * Menu Selection 3.
+     *
+     * Promps the user to enter a number to subtract from the result. Returns
+     * to the main menu by branching to 10b.
+     */
+3:
+    bl enter_number
+    mov r1, r0
+    ldr r0, [fp, #result_offset]
+    sub r0, r0, r1
     str r0, [fp, #result_offset]
     bal 10b
 

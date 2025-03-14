@@ -33,13 +33,14 @@
     .section .rodata
 
     programName: .asciz "ACPCalc"
-    programVersion: .asciz "v0.02"
+    programVersion: .asciz "v0.03"
     programCopyright: .asciz "Copyright (C) 2025 Stephen Bonar"
     programFormat: .asciz "%s %s\n%s\n\n"
-    menuFormat: .asciz "\n\nMenu:\n\n%s\n%s\n%s\n\n%s"
+    menuFormat: .asciz "\n\nMenu:\n\n%s\n%s\n%s\n%s\n\n%s"
     prompt: .asciz "< "
     enterNumberChoice: .asciz "1) Enter number"
     addNumberChoice: .asciz "2) Add number"
+    subtractNumberChoice: .asciz "3) Subtract number" 
     exitChoice: .asciz "0) Exit"
     enterNumberFormat: .asciz "\n\nEnter a number\n\n%s"
     resultHeader: .asciz "Result:\n"
@@ -112,18 +113,19 @@ print_menu:
      * There are more printf function arguments than we can place in registers,
      * so the rest have to be pushed on the stack. 
      */
-    ldr r0, =prompt
-    push {r0}
+    ldr r0, =exitChoice
+    ldr r1, =prompt
+    push {r0, r1}
 
     /* The first 4 printf arguments can be stored in r0 - r3 */
     ldr r0, =menuFormat
     ldr r1, =enterNumberChoice
     ldr r2, =addNumberChoice
-    ldr r3, =exitChoice
+    ldr r3, =subtractNumberChoice
     bl printf
 
     /* Deallocate the additional arguments we had to push on the stack. */
-    add sp, #word_size_bytes
+    add sp, #8
 
     return
     .endfunc
